@@ -65,3 +65,8 @@ secrets.yaml
 # Go workspace (local only - shields this module from ancestor go.work files)
 go.work
 go.work.sum
+
+minikube-darwin-arm64
+# Local minikube installer binary
+minikube-darwin-*
+minikube-linux-*
