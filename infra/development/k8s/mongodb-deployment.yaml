@@ -1,0 +1,74 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mongodb-data
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mongodb
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: mongodb
+  template:
+    metadata:
+      labels:
+        app: mongodb
+    spec:
+      containers:
+        - name: mongodb
+          image: mongo:7.0
+          args: ["--bind_ip_all"]
+          env:
+            - name: MONGO_INITDB_ROOT_USERNAME
+              value: "{{MONGO_USER_NAME}}"
+            - name: MONGO_INITDB_ROOT_PASSWORD
+              value: "{{MONGO_PASSWORD}}"
+          ports:
+            - containerPort: {{MONGO_PORT}}
+          volumeMounts:
+            - name: data
+              mountPath: /data/db
+          readinessProbe:
+            exec:
+              command:
+                - mongosh
+                - --quiet
+                - --eval
+                - "db.adminCommand('ping')"
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: mongodb-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongodb
+spec:
+  selector:
+    app: mongodb
+  ports:
+    - port: {{MONGO_PORT}}
+      name: mongodb
+      targetPort: {{MONGO_PORT}}
+  type: ClusterIP

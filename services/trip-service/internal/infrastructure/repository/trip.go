@@ -1,15 +1,25 @@
 package repository
 
-import "ride-sharing/services/trip-service/internal/domain"
+import (
+	"ride-sharing/services/trip-service/internal/domain"
 
-type repository struct {
-	trips     map[string]*domain.Trip
-	rideFares map[string]*domain.RideFare
+	"go.mongodb.org/mongo-driver/mongo"
+)
+
+type TripRepository interface {
+	Create(t *domain.Trip) error
 }
 
-func NewRepository() *repository {
-	return &repository{
-		trips:     make(map[string]*domain.Trip),
-		rideFares: make(map[string]*domain.RideFare),
+type tripRepository struct {
+	collection *mongo.Collection
+}
+
+func NewTripRepository(db *mongo.Database) TripRepository {
+	return &tripRepository{
+		collection: db.Collection("trips"),
 	}
+}
+
+func (r *tripRepository) Create(t *domain.Trip) error {
+	return nil
 }
