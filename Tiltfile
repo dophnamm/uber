@@ -11,8 +11,22 @@ def dotenv(path):
         if line == '' or line.startswith('#') or '=' not in line:
             continue
         k, v = line.split('=', 1)
-        result[k.strip()] = v.strip()
+        k = k.strip()
+        v = v.strip()
+        if len(v) > 1 and v[0] == v[-1] and (v[0] == '"' or v[0] == "'"):
+            v = v[1:-1]
+        # Expand $VAR / ${VAR} against keys already parsed, longest name first so
+        # that $MONGO_PORT is not partially matched by a shorter key like $MONGO.
+        for ek in sorted(result.keys(), key=len, reverse=True):
+            v = v.replace('${%s}' % ek, result[ek]).replace('$%s' % ek, result[ek])
+        result[k] = v
     return result
+
+def configmap(name, vars):
+    lines = ['apiVersion: v1', 'kind: ConfigMap', 'metadata:', '  name: ' + name, 'data:']
+    for k in sorted(vars.keys()):
+        lines.append('  %s: "%s"' % (k, vars[k].replace('\\', '\\\\').replace('"', '\\"')))
+    return blob('\n'.join(lines) + '\n')
 
 def render(path, vars):
     s = str(read_file(path))
@@ -56,11 +70,7 @@ docker_build_with_restart(
   ],
 )
 
-k8s_yaml(local(
-  'kubectl create configmap api-gateway-config ' +
-  '--from-env-file=services/api-gateway/.env --dry-run=client -o yaml',
-  quiet=True,
-))
+k8s_yaml(configmap('api-gateway-config', gateway_env))
 
 k8s_yaml(render('./infra/development/k8s/api-gateway-deployment.yaml', gateway_env))
 k8s_resource('api-gateway',
@@ -68,6 +78,17 @@ k8s_resource('api-gateway',
              objects=['api-gateway-config:configmap'],
              resource_deps=['api-gateway-compile'], labels="services")
 ### End of API Gateway ###
+
+### MongoDB ###
+trip_env = dotenv('./services/trip-service/.env')
+watch_file('./services/trip-service/.env')
+
+k8s_yaml(render('./infra/development/k8s/mongodb-deployment.yaml', trip_env))
+k8s_resource('mongodb',
+             port_forwards='%s:%s' % (trip_env['MONGO_PORT'], trip_env['MONGO_PORT']),
+             objects=['mongodb-data:persistentvolumeclaim'],
+             labels="database")
+### End of MongoDB ###
 
 ### Trip Service ###
 trip_compile_cmd = 'CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o build/trip-service ./services/trip-service/cmd/main.go'
@@ -94,20 +115,13 @@ docker_build_with_restart(
   ],
 )
 
-trip_env = dotenv('./services/trip-service/.env')
-watch_file('./services/trip-service/.env')
-
-k8s_yaml(local(
-  'kubectl create configmap trip-service-config ' +
-  '--from-env-file=services/trip-service/.env --dry-run=client -o yaml',
-  quiet=True,
-))
+k8s_yaml(configmap('trip-service-config', trip_env))
 
 k8s_yaml(render('./infra/development/k8s/trip-service-deployment.yaml', trip_env))
 k8s_resource('trip-service',
              port_forwards='%s:%s' % (trip_env['PORT'], trip_env['PORT']),
              objects=['trip-service-config:configmap'],
-             resource_deps=['trip-service-compile'], labels="services")
+             resource_deps=['trip-service-compile', 'mongodb'], labels="services")
 ### End of Trip Service ###
 
 ### Web Frontend ###

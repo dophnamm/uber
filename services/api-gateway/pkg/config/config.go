@@ -1,8 +1,8 @@
 package config
 
 import (
-	"fmt"
 	"log"
+	"os"
 
 	env "github.com/caarlos0/env/v11"
 	"github.com/joho/godotenv"
@@ -20,8 +20,8 @@ func LoadConfig() (Config, error) {
 }
 
 func InitConfig() *Config {
-	if err := godotenv.Load(); err != nil {
-		fmt.Println(err)
+	if err := godotenv.Load(); err != nil && !os.IsNotExist(err) {
+		log.Printf("loading .env: %v", err)
 	}
 
 	conf, err := LoadConfig()
