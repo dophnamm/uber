@@ -16,7 +16,7 @@ spec:
         - name: api-gateway
           image: ride-sharing/api-gateway
           ports:
-            - containerPort: 8081
+            - containerPort: {{PORT}}
           resources:
             requests:
               memory: "128Mi"
@@ -24,13 +24,11 @@ spec:
             limits:
               memory: "128Mi"
               cpu: "125m"
-          env:
-            # Accessing an env variable from the app-config config map
-            - name: GATEWAY_HTTP_ADDR
-              valueFrom:
-                configMapKeyRef:
-                  key: GATEWAY_HTTP_ADDR
-                  name: app-config
+          envFrom:
+            - configMapRef:
+                name: api-gateway-config
+            - configMapRef:
+                name: app-config
 ---
 apiVersion: v1
 kind: Service
@@ -39,7 +37,7 @@ metadata:
 spec:
   type: LoadBalancer
   ports:
-    - port: 8081
-      targetPort: 8081
+    - port: {{PORT}}
+      targetPort: {{PORT}}
   selector:
     app: api-gateway
