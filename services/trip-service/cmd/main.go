@@ -39,14 +39,21 @@ func main() {
 
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{
-			"status": "Ok",
+			"status": "ok",
 		})
 	})
 
+	// Repositories
 	tripRepo := repository.NewTripRepository(db)
-	tripService := service.NewTripService(tripRepo)
+	rideFareRepo := repository.NewRideFareRepository(db)
+
+	// Services
+	tripService := service.NewTripService(tripRepo, rideFareRepo)
+
+	// Handlers
 	tripHandler := tripHandlerV1.NewTripHandlerV1(tripService)
 
+	// Router
 	routes.NewTripRoutesV1(router, tripHandler)
 
 	if err := router.Run(fmt.Sprintf(":%d", cfg.Port)); err != nil {

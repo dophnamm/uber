@@ -9,3 +9,12 @@ generate-proto:
 		--go_out=$(GO_OUT) \
 		--go-grpc_out=$(GO_OUT) \
 		$(PROTO_SRC)
+
+dev:
+	tilt up
+
+start:
+	minikube start
+
+stop:
+	minikube stop
