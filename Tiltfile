@@ -43,7 +43,10 @@ k8s_yaml('./infra/development/k8s/app-config.yaml')
 ### End of K8s Config ###
 
 ### API Gateway ###
-gateway_compile_cmd = 'CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o build/api-gateway ./services/api-gateway/cmd/main.go'
+# Build to a temp path, then rename atomically. Writing straight to
+# build/api-gateway lets Tilt's watcher fire mid-write and sync a half-written
+# binary, which makes entr fail with `Text file busy` and crash the container.
+gateway_compile_cmd = 'CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o build/.tmp-api-gateway ./services/api-gateway/cmd/main.go && mv -f build/.tmp-api-gateway build/api-gateway'
 if os.name == 'nt':
   gateway_compile_cmd = './infra/development/docker/api-gateway-build.bat'
 
@@ -65,8 +68,15 @@ docker_build_with_restart(
     './shared',
   ],
   live_update=[
-    sync('./build', '/app/build'),
+    # Stage the binary, then rename it into place inside the container. Syncing
+    # straight onto /app/build/api-gateway lets entr exec a file Tilt is still
+    # writing, which fails with ETXTBSY and kills the container.
+    sync('./build/api-gateway', '/tmp/api-gateway'),
+    # ./shared is Go source compiled into the static binary, so nothing reads it
+    # at runtime. It stays synced only so edits there use live_update instead of
+    # falling back to a full image rebuild.
     sync('./shared', '/app/shared'),
+    run('mv -f /tmp/api-gateway /app/build/api-gateway'),
   ],
 )
 
@@ -91,7 +101,10 @@ k8s_resource('mongodb',
 ### End of MongoDB ###
 
 ### Trip Service ###
-trip_compile_cmd = 'CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o build/trip-service ./services/trip-service/cmd/main.go'
+# Build to a temp path, then rename atomically. Writing straight to
+# build/trip-service lets Tilt's watcher fire mid-write and sync a half-written
+# binary, which makes entr fail with `Text file busy` and crash the container.
+trip_compile_cmd = 'CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o build/.tmp-trip-service ./services/trip-service/cmd/main.go && mv -f build/.tmp-trip-service build/trip-service'
 if os.name == 'nt':
   trip_compile_cmd = './infra/development/docker/trip-build.bat'
 
@@ -110,8 +123,15 @@ docker_build_with_restart(
     './shared',
   ],
   live_update=[
-    sync('./build', '/app/build'),
+    # Stage the binary, then rename it into place inside the container. Syncing
+    # straight onto /app/build/trip-service lets entr exec a file Tilt is still
+    # writing, which fails with ETXTBSY and kills the container.
+    sync('./build/trip-service', '/tmp/trip-service'),
+    # ./shared is Go source compiled into the static binary, so nothing reads it
+    # at runtime. It stays synced only so edits there use live_update instead of
+    # falling back to a full image rebuild.
     sync('./shared', '/app/shared'),
+    run('mv -f /tmp/trip-service /app/build/trip-service'),
   ],
 )
 
@@ -129,6 +149,9 @@ docker_build(
   'ride-sharing/web',
   '.',
   dockerfile='./infra/development/docker/web.Dockerfile',
+  # Without `only`, the context is the whole repo and every Go rebuild (which
+  # rewrites build/) triggers a full web image rebuild.
+  only=['./web'],
 )
 
 k8s_yaml(render('./infra/development/k8s/web-deployment.yaml', {'GATEWAY_PORT': gateway_env['PORT']}))

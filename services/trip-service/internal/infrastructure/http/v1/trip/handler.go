@@ -5,6 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"ride-sharing/services/trip-service/internal/domain"
 	"ride-sharing/services/trip-service/internal/service"
 )
 
@@ -19,7 +20,17 @@ func NewTripHandlerV1(svc *service.TripService) *TripHandler {
 }
 
 func (h *TripHandler) Create(ctx *gin.Context) {
-	ctx.JSON(http.StatusCreated, gin.H{
-		"messages": "ok",
-	})
+	var req domain.Trip
+
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := h.svc.Create(&req); err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx.JSON(http.StatusCreated, req)
 }
